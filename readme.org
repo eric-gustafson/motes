@@ -1,0 +1,18 @@
+
+- [[https://cdn-learn.adafruit.com/assets/assets/000/044/636/original/CCS811_DS000459_2-00-1098798.pdf][CCS811]] datasheet
+- [[https://drive.google.com/drive/folders/1o8dseCsrrxkg5uQ3fIn7ZGpt_6Q_jbUd][AdaFruit Sample code]]
+- [[https://wiki.keyestudio.com/KS0457_keyestudio_CCS811_Carbon_Dioxide_Temperature_Air_Quality_Sensor][Butt simple Integration Board]]
+- [[https://micropython.org/download/esp32/][MicroPython images]]
+- [[https://docs.micropython.org/en/latest/index.html][MicroPython Docs]]
+- [[https://www.python.org/][Python Docs ]]
+- [[https://www.dhs.wisconsin.gov/chemical/carbondioxide.htm][DOH Guidelines]]
+
+
+ Sensors
+
+ | [[https://wiki.dfrobot.com/Gravity__Analog_Infrared_CO2_Sensor_For_Arduino_SKU__SEN0219]]                         |
+ | [[https://botland.com.pl/en/the-gas-sensors/8110-gravity-analog-infrared-co2-sensor-for-arduino-050000-ppm.html]] |
+ | [[https://wiki.dfrobot.com/CO2_Sensor_SKU_SEN0159]]                                                               |
+
+
+
