@@ -1,6 +1,9 @@
 import sys
+import os
 import struct
-import socket #UDP client broadcasts to server(s)
+import socket #send UDP messages server(s)
+
+import ujson ## config info 
 
 import network
 import ubinascii
@@ -124,40 +127,55 @@ cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 v = 0
 tvoc = 0
 
-while True:
-    sv = rint8u(CCS811_STATUS)
-    mm = rint8u(CCS811_MEAS_MODE);
-    errid = rint8u(CCS811_ERROR_ID)
-    print("status:",sv,",mmode:",mm,",errid:",errid)
-    if statdr(sv):
-        vba = i2c.readfrom_mem(CCS811_ADDRESS,CCS811_ALG_RESULT_DATA,8)
-        v    = int.from_bytes(vba[0:2],'big')
-        tvoc = int.from_bytes(vba[2:4],'big')
-        status = int.from_bytes(vba[4:5],'big');
-        error = int.from_bytes(vba[5:6],'big')
-        #(vba, tvocba, status, error) = struct.unpack('2B2BBB',vba)
-        print(v,tvoc,status,error)
-    else:
-        print ("co2 sensor status - data not ready"    )
-    if not wlan.isconnected():      # check if the station is connected to an AP
-        print("not connected")
-        wlan.connect('crazybird', 'bustergus25') # connect to an AP
-        #smac = ""
-        #for ot in list(mac): h = hex(ot); smac += h[2] + h[3]
-        #print(smac) 
-    else:
-        mac = wlan.config('mac')
-        smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
-        #print (mac)
-        #print (smac)
-        buf = "%s,co2,%d" % (smac, v)
-        print (buf)
-        [_,_,server,_] = wlan.ifconfig()
-        if len(server) > 0 :
-            print("sending to %s"%(server))
-        cs.sendto(buf, (server,3333))
-    sleep(30.0)
+ssid = "ssid"
+pw = "pw"
 
+try:
+    with open('/c.json','r') as f:
+        config = ujson.load(f)
+        ssid = config["ssid"]
+        pw = config["pw"]
+except Exception as e:
+    print ("couldn't process config file: %s",str(e))
+
+
+def tick():
+    while True:
+        sv = rint8u(CCS811_STATUS)
+        mm = rint8u(CCS811_MEAS_MODE);
+        errid = rint8u(CCS811_ERROR_ID)
+        print("status:",sv,",mmode:",mm,",errid:",errid)
+        if statdr(sv):
+            vba = i2c.readfrom_mem(CCS811_ADDRESS,CCS811_ALG_RESULT_DATA,8)
+            v    = int.from_bytes(vba[0:2],'big')
+            tvoc = int.from_bytes(vba[2:4],'big')
+            status = int.from_bytes(vba[4:5],'big');
+            error = int.from_bytes(vba[5:6],'big')
+            #(vba, tvocba, status, error) = struct.unpack('2B2BBB',vba)
+            print(v,tvoc,status,error)
+        else:
+            print ("co2 sensor status - data not ready"    )
+        if not wlan.isconnected():      # check if the station is connected to an AP
+            print("connecting with %s:%s" % (ssid,pw))
+            wlan.connect(ssid, pw) # connect to an AP
+            #smac = ""
+            #for ot in list(mac): h = hex(ot); smac += h[2] + h[3]
+            #print(smac) 
+        else:
+            mac = wlan.config('mac')
+            smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
+            #print (mac)
+            #print (smac)
+            buf = "%s,co2,%d" % (smac, v)
+            print (buf)
+            [_,_,server,_] = wlan.ifconfig()
+            if len(server) > 0 :
+                print("sending to %s"%(server))
+            cs.sendto(buf, (server,3333))
+        sleep(30.0)
+
+
+tick()
     
     
 
