@@ -144,7 +144,7 @@ def makeEveryNthSec(secs):
         return False
     return watcher
     
-Secs30 = makeEveryNthSec(600)
+ReconnectWaitTimeExpired = makeEveryNthSec(600)
     
     
 def tick():
@@ -165,7 +165,7 @@ def tick():
         else:
             print ("co2 sensor status - data not ready"    )
         if not wlan.isconnected():      # check if the station is connected to an AP
-            if( Secs30() ) :
+            if( ReconnectWaitTimeExpired() ) :
                 print("connecting with %s:%s" % (ssid,pw))
                 wlan.connect(ssid, pw) # connect to an AP
             #smac = ""
