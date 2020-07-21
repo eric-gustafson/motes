@@ -2,7 +2,7 @@ import sys
 import os
 import struct
 import socket #send UDP messages server(s)
-
+import utime
 import ujson ## config info 
 
 import network
@@ -58,17 +58,10 @@ def rint8u(reg):
     ba = i2c.readfrom_mem(CCS811_ADDRESS,reg,1)
     return  int.from_bytes(ba,'big')
 
-def statfwmode(stat):
-    return stat&0x80
-
-def statappvalid(stat):
-    return stat&0x10
-
-def statdr(stat):
-    return stat&0x08
-
-def staterr(stat):
-    return stat&0x01
+statfwmode = lambda stat:  stat&0x80
+statappvalid = lambda stat : stat&0x10
+statdr = lambda stat : stat&0x08
+staterr = lambda stat : stat&0x01
 
 def mexit(str):
     print ("Can't start CO2 app: %s" %(str))
@@ -138,13 +131,29 @@ try:
 except Exception as e:
     print ("couldn't process config file: %s",str(e))
 
+    
 
+def makeEveryNthSec(secs):
+    last = utime.ticks_ms()
+    def watcher():
+        nonlocal last
+        now = utime.ticks_ms()
+        if ( abs(now - last) > (1000*secs)) :
+            last = now
+            return True
+        return False
+    return watcher
+    
+Secs30 = makeEveryNthSec(600)
+    
+    
 def tick():
     while True:
         sv = rint8u(CCS811_STATUS)
         mm = rint8u(CCS811_MEAS_MODE);
         errid = rint8u(CCS811_ERROR_ID)
-        print("status:",sv,",mmode:",mm,",errid:",errid)
+        if sv != 152:
+            print("status:",sv,",mmode:",mm,",errid:",errid)
         if statdr(sv):
             vba = i2c.readfrom_mem(CCS811_ADDRESS,CCS811_ALG_RESULT_DATA,8)
             v    = int.from_bytes(vba[0:2],'big')
@@ -156,8 +165,9 @@ def tick():
         else:
             print ("co2 sensor status - data not ready"    )
         if not wlan.isconnected():      # check if the station is connected to an AP
-            print("connecting with %s:%s" % (ssid,pw))
-            wlan.connect(ssid, pw) # connect to an AP
+            if( Secs30() ) :
+                print("connecting with %s:%s" % (ssid,pw))
+                wlan.connect(ssid, pw) # connect to an AP
             #smac = ""
             #for ot in list(mac): h = hex(ot); smac += h[2] + h[3]
             #print(smac) 
@@ -172,7 +182,7 @@ def tick():
             if len(server) > 0 :
                 print("sending to %s"%(server))
             cs.sendto(buf, (server,3333))
-        sleep(30.0)
+        sleep(120.0)
 
 
 tick()
