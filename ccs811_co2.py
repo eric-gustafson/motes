@@ -8,6 +8,8 @@ import ujson ## config info
 import network
 import ubinascii
 
+import miot
+
 #from machine import ADC
 #from machine import Pin, ADC
 from time import sleep
@@ -46,10 +48,6 @@ CCS811_DRIVE_MODE_250MS = 0x04
 CCS811_HW_ID_CODE	=		0x81
 
 CCS811_REF_RESISTOR	=		100000
-
-
-    
-
 
 #i2c = I2C(scl=Pin(5), sda=Pin(4), freq=100000)
 i2c = I2C(scl=Pin(22), sda=Pin(21), freq=100000)
@@ -106,9 +104,6 @@ ba = (0x10).to_bytes(2,sys.byteorder)# bytearray([1,0])
 i2c.writeto_mem(CCS811_ADDRESS,CCS811_MEAS_MODE,ba)
 
 
-wlan = network.WLAN(network.STA_IF) # create station interface
-wlan.active(True)       # activate the interface
-
 
 mac = ""
 smac = ""
@@ -120,32 +115,6 @@ cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 v = 0
 tvoc = 0
 
-ssid = "ssid"
-pw = "pw"
-
-try:
-    with open('/c.json','r') as f:
-        config = ujson.load(f)
-        ssid = config["ssid"]
-        pw = config["pw"]
-except Exception as e:
-    print ("couldn't process config file: %s",str(e))
-
-    
-
-def makeEveryNthSec(secs):
-    last = utime.ticks_ms()
-    def watcher():
-        nonlocal last
-        now = utime.ticks_ms()
-        if ( abs(now - last) > (1000*secs)) :
-            last = now
-            return True
-        return False
-    return watcher
-    
-ReconnectWaitTimeExpired = makeEveryNthSec(600)
-    
     
 def tick():
     while True:
@@ -164,21 +133,14 @@ def tick():
             print(v,tvoc,status,error)
         else:
             print ("co2 sensor status - data not ready"    )
-        if not wlan.isconnected():      # check if the station is connected to an AP
-            if( ReconnectWaitTimeExpired() ) :
-                print("connecting with %s:%s" % (ssid,pw))
-                wlan.connect(ssid, pw) # connect to an AP
-            #smac = ""
-            #for ot in list(mac): h = hex(ot); smac += h[2] + h[3]
-            #print(smac) 
-        else:
-            mac = wlan.config('mac')
+        if miot.networkTick():
+            mac = miot.wlan.config('mac')
             smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
             #print (mac)
             #print (smac)
             buf = "%s,co2,%d" % (smac, v)
             print (buf)
-            [_,_,server,_] = wlan.ifconfig()
+            [_,_,server,_] = miot.wlan.ifconfig()
             if len(server) > 0 :
                 print("sending to %s"%(server))
             cs.sendto(buf, (server,3333))
