@@ -104,19 +104,16 @@ ba = (0x10).to_bytes(2,sys.byteorder)# bytearray([1,0])
 i2c.writeto_mem(CCS811_ADDRESS,CCS811_MEAS_MODE,ba)
 
 
-
-mac = ""
-smac = ""
-
 cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
 
 v = 0
 tvoc = 0
 
     
 def tick():
+    global v
+    global tvoc
     while True:
         sv = rint8u(CCS811_STATUS)
         mm = rint8u(CCS811_MEAS_MODE);
@@ -133,11 +130,9 @@ def tick():
             print(v,tvoc,status,error)
         else:
             print ("co2 sensor status - data not ready"    )
-        if miot.networkTick():
+        if miot.networkTick() and (v > 0):
             mac = miot.wlan.config('mac')
             smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
-            #print (mac)
-            #print (smac)
             buf = "%s,co2,%d" % (smac, v)
             print (buf)
             [_,_,server,_] = miot.wlan.ifconfig()

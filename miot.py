@@ -5,6 +5,7 @@
 import sys
 import utime
 import network
+import ujson ## config info
 
 wlan = network.WLAN(network.STA_IF) # create station interface
 wlan.active(True)       # activate the interface
@@ -50,10 +51,13 @@ except Exception as e:
 ## reboot the mote.
 ## This function returns True if it's on the network, False if not.
 def networkTick():
+    global ssid
+    global pw
+    global wlan
     if not wlan.isconnected():      # check if the station is connected to an AP
         if NetworkWatchdogExpired():
             sys.exit(2)
-        if( ReconnectWaitTimeExpired() ) :
+        if( ReconnectWaitTimeExpired() ):
             print("connecting with %s:%s" % (ssid,pw))
             wlan.connect(ssid, pw) # connect to an AP
             #smac = ""
