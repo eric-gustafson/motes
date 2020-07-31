@@ -8,7 +8,9 @@ import ujson ## config info
 import network
 import ubinascii
 
+import ssd1306
 import miot
+import netdog
 
 #from machine import ADC
 #from machine import Pin, ADC
@@ -104,16 +106,18 @@ ba = (0x10).to_bytes(2,sys.byteorder)# bytearray([1,0])
 i2c.writeto_mem(CCS811_ADDRESS,CCS811_MEAS_MODE,ba)
 
 
-cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#v = 0
+#tvoc = 0
 
-v = 0
-tvoc = 0
+display = ssd1306.SSD1306_I2C(128, 32, i2c)
+display.fill(1)  # Fill the entire display with 1="on"
+display.show()
+sleep(0.2)
+display.fill(0)
+display.show()
 
-    
 def tick():
-    global v
-    global tvoc
+    v = 0
     while True:
         sv = rint8u(CCS811_STATUS)
         mm = rint8u(CCS811_MEAS_MODE);
@@ -128,18 +132,22 @@ def tick():
             error = int.from_bytes(vba[5:6],'big')
             #(vba, tvocba, status, error) = struct.unpack('2B2BBB',vba)
             print(v,tvoc,status,error)
+            displaybuff = "CO2 %d PPM" % (v)
+            print (displaybuff)
+            display.fill(0)
+            display.text(displaybuff, 1, 1, 1)
+            display.text(miot.durationString(miot.uptime()),1,23,1)
+            display.show()
         else:
             print ("co2 sensor status - data not ready"    )
-        if miot.networkTick() and (v > 0):
+        miot.tic()
+        if netdog.tic() and (v > 0):
             mac = miot.wlan.config('mac')
             smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
             buf = "%s,co2,%d" % (smac, v)
             print (buf)
-            [_,_,server,_] = miot.wlan.ifconfig()
-            if len(server) > 0 :
-                print("sending to %s"%(server))
-            cs.sendto(buf, (server,3333))
-        sleep(120.0)
+            miot.sndmsg(buf)
+        sleep(10.0)
 
 
 tick()

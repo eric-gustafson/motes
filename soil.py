@@ -25,21 +25,26 @@ adc.read()
 cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
+av = [] 
+i = 0;
+
 while True:
     v = adc.read()
+    i++;
+    av[i%10] = v;
     print(v)
     if miot.networkTick() and (v > 0):    
         mac = miot.wlan.config('mac')
         smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
         print (mac)
         print (smac)
-        buf = "%s,soil,%d" % (smac, v)
+        buf = "%s,soil,%d" % (smac, sum(av)/len(av))
         print (buf)
         [_,_,server,_] = miot.wlan.ifconfig()
         if len(server) > 0 :
             print("sending to %s"%(server))
         cs.sendto(buf, (server,3333))
-    sleep(60.0)
+    sleep(300.0)
 
     
     

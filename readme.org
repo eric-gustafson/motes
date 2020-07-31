@@ -16,3 +16,23 @@
 
 
 
+
+* CO2 Sensor
+  
+  Uses - measure how well your building is exchanging outside air.  The theory is it
+  is a measures how much of 'breath' is in the building.
+
+  - writes PPM to the display (128x32)
+
+    Display Driver, [[https://www.twobitarcade.net/article/oled-displays-i2c-micropython/]]
+
+    [[https://github.com/micropython/micropython/blob/master/drivers/display/ssd1306.py]]
+ 
+    [[http://www.dsdtech-global.com/2018/05/iic-oled-lcd-u8glib.html]]
+
+    
+  [[https://www.amazon.com/gp/product/B07D9H83R4/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&psc=1]]
+
+  - sends ppm info to server
+
+
