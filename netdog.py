@@ -12,6 +12,7 @@ import utime
 import network
 import ujson ## config info
 import miot
+from time import sleep
 
 NetGuestTimeExpired = miot.makeEveryNthSec(60)
 
@@ -56,24 +57,34 @@ def dogTickIsNotConnected():
     global netscan
     if len(netscan) == 0:
         print ("(re)scanning network")
-        miot.wlan.active(False)
-        miot.wlan.active(True)
         netscan = miot.wlan.scan()
+        netscan.reverse()
     print("netscan:",netscan)
     if len(netscan) > 0:
         net = netscan.pop()
         target = net[0]
-        print("attempting to connect to",target)
-        miot.wlan.active(False)
-        miot.wlan.active(True)                
-        miot.wlan.connect(net[0],miot.config["pw"])
+        #arget = b'airia1'
+        pw = miot.config["pw"]
+        print("attempting to connect to",target,pw)
+        miot.wlan.connect(target,pw)
         NetGuestTimeExpired(True)
         ttl = NetGuestTimeExpired(-1)
         print("guest wdt:",ttl/1000)
+        i = 0;
+        while not miot.wlan.isconnected() and i < 10: 
+            print("! connected",i)
+            i = i + 1
+            sleep(1)
     #miot.wlan.connect(config["ssid"], config["pw"]) # connect to an AP
     
 ## 
 ## 
+def networkHeartBeat(messg):
+    msg = messg.decode('utf-8')
+    a,b,*rest = msg.split()
+    if a == "stay":
+        print("network watchdog received:", b)
+        NetGuestTimeExpired(int(b))
 
 def tic():
     """Called from the motes main tick loop.  Tries to reconnect on a
@@ -82,18 +93,19 @@ mote.  This function returns True if it's on the network, False if
 not.
 
     """
-    print ("netdog.tic")
-    print ("miot.wlan:", miot.wlan)
+    miot.log ("netdog.tic:", miot.wlan)
+    miot.addHook(networkHeartBeat)
+    #print("hooks",miot.msgHooks)
     if not miot.wlan.active():
         print ("setting wlan active")
         miot.wlan.active(True)       # activate the interface
-    print ("test connectivity")
+    #print ("test connectivity")
     if miot.wlan.isconnected():      # check if the station is connected to an AP
-        print ("is connected")
+        print ("connected")
         dogTickIsConnected()
         return True
     else:
-        print ("! connected")
+        print ("!connected")
         dogTickIsNotConnected()
         return False
     #     if NetworkWatchdogExpired():

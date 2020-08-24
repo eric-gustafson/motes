@@ -2,12 +2,10 @@
 
 ## Purpose: General utilities for all of the motes.  The little CPU's that are common
 ## to the solution who are running micropython programs.
-import sys
-import utime
-import socket #send UDP messages server(s)
-import network
+import sys, struct, utime, socket, network
 import ujson ## config info
 import uselect
+from time import sleep
 
 wlan = network.WLAN(network.STA_IF) # create station interface
 
@@ -28,11 +26,18 @@ def uptime ():
         init_time = utime.ticks_ms()
     return utime.ticks_ms() - init_time
 
+def uptime_s():
+    return uptime()/1000
+
+def log (*args):
+    newargs = tuple([uptime_s(),":"]) + args
+    print(*newargs)
+
 def makeEveryNthSec(secs):
     "Returns a "
     last = utime.ticks_ms()
     def watcher(watchdogTick=None):
-        nonlocal last
+        nonlocal last,secs
         now = utime.ticks_ms()
         if watchdogTick == None:
             if ( abs(now - last) > (1000*secs)) :
@@ -41,6 +46,8 @@ def makeEveryNthSec(secs):
             return False
         if watchdogTick == -1:
             return 1000*secs - abs(now - last)
+        if isinstance(watchdogTick,int):
+            secs = watchdogTick
         else:
             last = now
             return True
@@ -107,25 +114,87 @@ def initCommunications():
         [_,_,server,_] = wlan.ifconfig()
         ## No bind on the sending socket
         #snd_socket.bind((server,3333))
-        rcv_socket.bind(('localhost',3333))
+        rcv_socket.bind(('0.0.0.0',3333))
         poll = uselect.poll()
-        poll.register(rcv_socket, uselect.POLLIN)
+        poll.register(rcv_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
         return True
     return False
 
 def sndmsg(msg):
     global snd_socket,server
     if snd_socket and server:
-        print("sending to %s"%(server))
+        log("sending to %s"%(server))
         snd_socket.sendto(msg, (server,3333))        
 
-def tic():
+msgHooks = []
+
+def addHook(thunk):
+    ##pushnew
+    if not thunk in msgHooks:
+        msgHooks.append(thunk)
+
+def distributeMsgToListeners(msg):
+    for e in msgHooks:
+        try:
+            e(msg)
+        except Exception as e:
+            print(e)
+
+def logMsg(buff):
+    print("processing msg:",buff)
+
+
+    
+def tic(waitTime_ms):
     """ This should be called from the main loop.  Setups of the socket to
 send messages on the first invocation and receives messages on
 subsequent invocations"""
-    if initCommunications():
-        print ("connected, checking for events")
-        for events in poll.poll(20):
-            print(event)
-            buff,address = rcv_socket.recvfrom(512)
-            print("mesg received",buff)
+    global poll, rcv_socket
+    initCommunications()
+    addHook(logMsg)
+    #print("hooks:",msgHooks)
+    if poll:
+        #print ("connected, checking for events")
+        events = poll.poll(waitTime_ms)
+        #print ("poll events: ",events)
+        for s, flag in events:
+            if flag & uselect.POLLIN:
+                buff,address = rcv_socket.recvfrom(512)
+                distributeMsgToListeners(buff)
+                sleep(waitTime_ms/1000)
+                return True
+    return False
+
+def snd_reporting_event(tag,value):
+    global wlan
+    mac = wlan.config('mac')
+    smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
+    buf = "%s,%s,%d" % (smac, tag,value)
+    sndmsg(buf)
+
+## We remember the last reading we sent, along with the time.
+reporting_memory = {}
+
+def reporting_events(reporting_record):
+    global reporting_memory
+    for tag_key in reporting_record:
+        handle, thunk, min_reporting_time, max_reporting_time, value_delta = reporting_record[tag_key]
+        new_value = thunk()
+        now = uptime_s()
+        if handle in reporting_memory:
+            last, tls  = reporting_memory[handle]
+            time_delta = abs(now - tls)
+            ## We are above the minimum reporting time, and we've exceeded our firing threshold
+            if ( abs(last-new_value) > value_delta )  and ( time_delta > min_reporting_time ) :
+                snd_reporting_event(tag_key,new_value)
+                reporting_memory[handle] = [new_value, now]
+            ## We've gone over the max reporting time
+            if time_delta > max_reporting_time:
+                snd_reporting_event(tag_key,new_value)
+                reporting_memory[handle] = [new_value, now]                
+        else:
+            snd_reporting_event(tag_key,new_value)
+            reporting_memory[handle] = [new_value, now]        
+                
+    
+

@@ -10,12 +10,11 @@ import miot, netdog
 #adc.read()                  # read value, 0-4095 across voltage range 0.0v - 1.0v
 
 ## On the Adafruit board, the pin is actually labeld A2/34
-adc = ADC(Pin(34)) # Adafruit ADC2(labelled on board)
-adc.atten(ADC.ATTN_11DB)    # set 11dB input attenuation (voltage range roughly 0.0v - 3.6v)
-adc.width(ADC.WIDTH_12BIT)   # set 9 bit return values (returned range 0-511)
-adc.read()                  
+adc = ADC(0) # Adafruit ADC2(labelled on board)
+x = adc.read()                  
 #wlan.ifconfig()         # get the interface's IP/netmask/gw/DNS addresses
 
+print (x)
 
 cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -29,6 +28,31 @@ led = Pin (2, Pin.OUT)
 
 led.value(0)
 
+
+rtc = machine.RTC()
+rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
+
+# check if the device woke from a deep sleep
+if machine.reset_cause() == machine.DEEPSLEEP_RESET:
+    print('woke from a deep sleep')
+
+def machineDeepSleep():
+    rtc.alarm(rtc.ALARM0, 1000*3600) # sleep for 1 hour
+    machine.deepsleep()
+
+num_msgs = 0
+
+def soil_data():
+    global av
+    return sum(av)/len(av)
+    
+
+soil_reporting_record = {
+    'soil': [1,soil_data,60,3600,10]
+}
+
+
+
 while True:
     v = adc.read()
     #print(v)
@@ -40,19 +64,9 @@ while True:
     if sampleTime():
         print (i,":",av)
         if netdog.tic():
-            mac = miot.wlan.config('mac')
-            smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
-            buf = "%s,soil,%d" % (smac, sum(av)/len(av))
-            miot.sndmsg(buf)
-            if miot.tic(10000):
-                print ("deep sleep")
-                deepsleep(1000*4)
-        # print (buf)
-        # [_,_,server,_] = miot.wlan.ifconfig()
-        # if len(server) > 0 :
-        #     print("sending to %s"%(server))
-        # cs.sendto(buf, (server,3333))
-        #sleep(10.0)
+            miot.reporting_events(soil_reporting_record)        
+        num_msgs = num_msgs + 1
+        #machineDeepSleep()
 
 
 
