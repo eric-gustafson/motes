@@ -1,7 +1,4 @@
-import sys
-import os
-import struct
-import socket #send UDP messages server(s)
+import sys, os, struct, socket
 import utime
 import ujson ## config info 
 
@@ -9,15 +6,16 @@ import network
 import ubinascii
 
 import ssd1306
-import miot
-import netdog
+import miot,  netdog
 
 #from machine import ADC
 #from machine import Pin, ADC
 from time import sleep
-
-
 from machine import Pin, I2C
+
+## Turn off/on the joining algorithm.
+net = False #True
+            
 
 CCS811_ADDRESS =               0x5A
 
@@ -106,7 +104,7 @@ ba = (0x10).to_bytes(2,sys.byteorder)# bytearray([1,0])
 i2c.writeto_mem(CCS811_ADDRESS,CCS811_MEAS_MODE,ba)
 
 
-#v = 0
+v = 0
 #tvoc = 0
 
 display = ssd1306.SSD1306_I2C(128, 32, i2c)
@@ -116,41 +114,65 @@ sleep(0.2)
 display.fill(0)
 display.show()
 
+def handle_co2_sensor():
+    global v
+    sv = rint8u(CCS811_STATUS)
+    mm = rint8u(CCS811_MEAS_MODE);
+    errid = rint8u(CCS811_ERROR_ID)
+    if sv != 152:
+        print("status:",sv,",mmode:",mm,",errid:",errid)
+    if statdr(sv):
+        vba = i2c.readfrom_mem(CCS811_ADDRESS,CCS811_ALG_RESULT_DATA,8)
+        v    = int.from_bytes(vba[0:2],'big')
+        tvoc = int.from_bytes(vba[2:4],'big')
+        status = int.from_bytes(vba[4:5],'big');
+        error = int.from_bytes(vba[5:6],'big')
+        #(vba, tvocba, status, error) = struct.unpack('2B2BBB',vba)
+        #print(v,tvoc,status,error)
+        displaybuff = "CO2 %d PPM" % (v)
+        #print (displaybuff)
+        display.fill(0)
+        display.text(displaybuff, 1, 1, 1)
+        display.text("uptime: " + miot.durationString(miot.uptime()),1,23,1)
+        display.show()
+        # if not net:
+        #     print(displaybuff)
+    else:
+        print ("co2 sensor status - data not ready"    )
+
+def read_co2():
+    return v
+
+co2_reporting_record = {
+    'co2': [1,read_co2,1,60,5]
+    }
+
 def tick():
+    global v
     v = 0
     while True:
-        sv = rint8u(CCS811_STATUS)
-        mm = rint8u(CCS811_MEAS_MODE);
-        errid = rint8u(CCS811_ERROR_ID)
-        if sv != 152:
-            print("status:",sv,",mmode:",mm,",errid:",errid)
-        if statdr(sv):
-            vba = i2c.readfrom_mem(CCS811_ADDRESS,CCS811_ALG_RESULT_DATA,8)
-            v    = int.from_bytes(vba[0:2],'big')
-            tvoc = int.from_bytes(vba[2:4],'big')
-            status = int.from_bytes(vba[4:5],'big');
-            error = int.from_bytes(vba[5:6],'big')
-            #(vba, tvocba, status, error) = struct.unpack('2B2BBB',vba)
-            print(v,tvoc,status,error)
-            displaybuff = "CO2 %d PPM" % (v)
-            print (displaybuff)
-            display.fill(0)
-            display.text(displaybuff, 1, 1, 1)
-            display.text(miot.durationString(miot.uptime()),1,23,1)
-            display.show()
+        handle_co2_sensor()
+        if net:
+            miot.tic(20)
+            if netdog.tic() and (v > 0):
+                miot.reporting_events(co2_reporting_record)
+                sleep(60)
+                #mac = miot.wlan.config('mac')
+                #smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
+                #buf = "%s,co2,%d" % (smac, v)
+                #print (buf)
+                #miot.sndmsg(buf)
+                #miot.tic(10000)
+            else:
+                sleep(10.0)
         else:
-            print ("co2 sensor status - data not ready"    )
-        miot.tic()
-        if netdog.tic() and (v > 0):
-            mac = miot.wlan.config('mac')
-            smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
-            buf = "%s,co2,%d" % (smac, v)
-            print (buf)
-            miot.sndmsg(buf)
-        sleep(10.0)
+            sleep(10.0)
 
+def main(argv):
+    tick()
 
-tick()
+if __name__ == "__main__":
+    main(sys.argv[1:])
     
     
 

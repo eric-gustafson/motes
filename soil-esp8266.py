@@ -22,7 +22,7 @@ cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 av = [0] * 10
 i = 0;
 
-sampleTime = miot.makeEveryNthSec(10)
+sampleTime = miot.Watchdog(1000*10)
 
 led = Pin (2, Pin.OUT)
 
@@ -40,18 +40,19 @@ def machineDeepSleep():
     rtc.alarm(rtc.ALARM0, 1000*3600) # sleep for 1 hour
     machine.deepsleep()
 
-num_msgs = 0
-
 def soil_data():
     global av
     return sum(av)/len(av)
     
-
 soil_reporting_record = {
-    'soil': [1,soil_data,60,3600,10]
+    'soil': [1,soil_data,1,60,5]
 }
 
+files = miot.make_files_hash('miot.py', 'netdog.py', 'soil-esp8266.py')
 
+print(files)
+
+num_msgs = 0
 
 while True:
     v = adc.read()
@@ -61,12 +62,17 @@ while True:
     #print (i,":",av)
     miot.tic(20)
     #netdog.tic()
-    if sampleTime():
+    ttl = sampleTime.msecs_left()
+    #print(ttl)
+    if ttl <= 0:
+        sampleTime.reset()
         print (i,":",av)
         if netdog.tic():
-            miot.reporting_events(soil_reporting_record)        
+            #miot.check4updates('soil')
+            miot.reporting_events(soil_reporting_record)
         num_msgs = num_msgs + 1
         #machineDeepSleep()
+    sleep(0.1)
 
 
 

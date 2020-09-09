@@ -23,7 +23,7 @@ cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 av = [0] * 10
 i = 0;
 
-sampleTime = miot.makeEveryNthSec(10)
+sampleTime = miot.Watchdog(10*1000)
 
 led = Pin (2, Pin.OUT)
 

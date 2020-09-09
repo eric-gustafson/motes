@@ -2,7 +2,7 @@
 
 ## Purpose: General utilities for all of the motes.  The little CPU's that are common
 ## to the solution who are running micropython programs.
-import sys, struct, utime, socket, network
+import sys, struct, utime, socket, network, uhashlib, urequests
 import ujson ## config info
 import uselect
 from time import sleep
@@ -13,11 +13,14 @@ wlan = network.WLAN(network.STA_IF) # create station interface
 ## and the password to join the network here.
 config = []
 
-if wlan.active():
-    if wlan.isconnected():
-        wlan.disconnect()
-    wlan.active(False)
-
+try:
+    if wlan.active():
+        if wlan.isconnected():
+            wlan.disconnect()
+        wlan.active(False)
+except Exception as e:
+    print ("miot",str(e))
+    
 init_time = 0
 
 def uptime ():
@@ -33,32 +36,28 @@ def log (*args):
     newargs = tuple([uptime_s(),":"]) + args
     print(*newargs)
 
-def makeEveryNthSec(secs):
-    "Returns a "
-    last = utime.ticks_ms()
-    def watcher(watchdogTick=None):
-        nonlocal last,secs
-        now = utime.ticks_ms()
-        if watchdogTick == None:
-            if ( abs(now - last) > (1000*secs)) :
-                last = now
-                return True
-            return False
-        if watchdogTick == -1:
-            return 1000*secs - abs(now - last)
-        if isinstance(watchdogTick,int):
-            secs = watchdogTick
-        else:
-            last = now
-            return True
-    return watcher
 
-## Try and reconnect every n seconds
-ReconnectWaitTimeExpired = makeEveryNthSec(60)
+class Watchdog:
+    last = None
+    msecs = None
 
+    def set_msecs(self,msecs):
+        self.msecs = msecs
+
+    def __init__(self, msecs):
+        self.set_msecs(msecs)
+        self.reset()
+
+    def msecs_left(self):
+        now = utime.ticks_ms()        
+        return self.msecs - (now - self.last)        
+
+    def reset(self):
+        self.last =  utime.ticks_ms()
+    
 ## Reboot the mote if we haven't been able to connect for
 ## an hour.
-NetworkWatchdogExpired = makeEveryNthSec(300)
+NetworkWatchdogExpired = Watchdog(3600)
 
 def load_config():
     global config
@@ -169,7 +168,7 @@ def snd_reporting_event(tag,value):
     global wlan
     mac = wlan.config('mac')
     smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
-    buf = "%s,%s,%d" % (smac, tag,value)
+    buf = "%s,%s,%d,%d" % (smac, tag,value, uptime())
     sndmsg(buf)
 
 ## We remember the last reading we sent, along with the time.
@@ -196,5 +195,85 @@ def reporting_events(reporting_record):
             snd_reporting_event(tag_key,new_value)
             reporting_memory[handle] = [new_value, now]        
                 
+
+## check the server for source code updates
+## Simply download and then reboot.
+def file_hash(fname):
+    try:
+        hasher = uhashlib.sha256()
+        with open(fname, mode = "rb") as f:
+            chunk = f.read(512)
+            while chunk:
+                hasher.update(chunk)
+                chunk = f.read(512)
+        return hasher.digest()
+    except Exception as e:
+        print("file_hash",e)
+    return None
+
+fh = {}
+
+def make_files_hash(*files):
+    global fh
+    for fname in files:
+        print(fname)
+        value = file_hash(fname)
+        print("value",value)
+        if value :
+            fh[fname] = value
+    return fh
+
+def hg(app,fname ,headers={}):
+    global server
+    try:
+        url = "http://%s/%s" % (server,fname)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #log("hg.server",server)
+        s.connect(socket.getaddrinfo(server, 80)[0][-1])
+        cmd = (b"GET /upy/%s HTTP/1.0\r\n" %fname)
+        log("hg.s",server,":",s,cmd)
+        s.write(cmd)
+        for k in headers:
+            s.write(k)
+            s.write(b": ")
+            s.write(headers[k])
+            s.write(b"\r\n")
+        s.write(b"\r\n")            
+        l = s.readline()
+        log("hg.l",l)
+        l = l.split(None, 2)
+        status = int(l[1])
+        reason = ""
+        if len(l) > 2:
+            reason = l[2].rstrip()
+        while True:
+            l = s.readline()
+            if not l or l == b"\r\n":
+                break
+        ## We should have the content here
+        with open("a", mode = "w") as f:
+            chunk = s.readline()
+            while chunk:
+                print(chunk)
+                f.write(chunk)
+                chunk = s.readline() 
+    except OSError:
+        s.close()
+        raise
+        
+
+def check4updates(app):
+    try:
+        for fname_key in fh:
+            log("c4u.fname",fname_key)
+            hg(app,fname_key)
+    except Exception as e:
+        print("c4u.err",e)
+        
+
     
 
+# def check_for_updates(files_md5_hash):
+#     for f in files:
+        
+        

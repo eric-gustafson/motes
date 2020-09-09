@@ -14,7 +14,7 @@ import ujson ## config info
 import miot
 from time import sleep
 
-NetGuestTimeExpired = miot.makeEveryNthSec(60)
+NetWD = miot.Watchdog(60*1000)
 
 netscan = []
 ssid = None
@@ -43,9 +43,9 @@ def nextNet():
 
 def dogTickIsConnected():
     """ Run the watchdog connected function.  Check if the timer to see if we should disconnect"""
-    te = NetGuestTimeExpired()
-    print ("time expired?:", te, ",time left:",NetGuestTimeExpired(-1)/1000)
-    if te:
+    tl = NetWD.msecs_left()
+    print ("time expired?:", "time left:", tl)
+    if tl <= 0:
         miot.shutdown_comms()
         miot.wlan.disconnect()
         miot.wlan.active(False)
@@ -67,8 +67,8 @@ def dogTickIsNotConnected():
         pw = miot.config["pw"]
         print("attempting to connect to",target,pw)
         miot.wlan.connect(target,pw)
-        NetGuestTimeExpired(True)
-        ttl = NetGuestTimeExpired(-1)
+        NetWD.reset()
+        ttl = NetWD.msecs_left()
         print("guest wdt:",ttl/1000)
         i = 0;
         while not miot.wlan.isconnected() and i < 10: 
@@ -84,7 +84,8 @@ def networkHeartBeat(messg):
     a,b,*rest = msg.split()
     if a == "stay":
         print("network watchdog received:", b)
-        NetGuestTimeExpired(int(b))
+        NetWD.set_msecs(1000*int(b))
+        NetWD.reset()
 
 def tic():
     """Called from the motes main tick loop.  Tries to reconnect on a
@@ -108,7 +109,7 @@ not.
         print ("!connected")
         dogTickIsNotConnected()
         return False
-    #     if NetworkWatchdogExpired():
+    #     if NetworkWatchdogExpired.tic():
     #         leaveNet()
     #     if( ReconnectWaitTimeExpired() ):
     #         print("connecting with %s:%s" % (miot.config["ssid"],miot.config["pw"]))
@@ -118,7 +119,7 @@ not.
     #         #print(smac)
     #     return False
     # else:
-    #     NetworkWatchdogExpired(watchdogTick=True)
+    #     NetworkWatchdogExpiredo(watchdogTick=True)
     #     return True
     
     
@@ -128,7 +129,7 @@ not.
 #         if config["ssid"] == miot.wlan.config('essid'):
 #             print ("on network")
 #             return True
-#         if NetGuestTimeExpired()
+#         if NetWD()
 
 
 
