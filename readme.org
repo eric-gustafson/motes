@@ -1,4 +1,328 @@
+#+title: Game Plan
+#+author: Eric Gustafson
 
+* Executive Summary
+
+  Wireless MESH networking can greatly decrease costs for 
+  solutions to solve some of our most challenging problems.  An easy
+  to install, easy to manage system that allows rapid and economical
+  setup can be the difference maker in system acceptance.
+  
+  The goal of the repo is to plan and then provide working Code and
+  documentation to prove or disprove that we can use ESP4866 and ESP32
+  FREERTOS based system for large scale industrial deployments.
+
+* Open Questions
+
+  I think we can have a working MESH with a dhcps server dishing out
+  networks, a dhcp network relay, and the ability to set network route
+  table entries on the nodes from the aggregator.
+
+** TODO show snippit of code that will set a route table in freertos
+   ip4.c has a function ip_forward
+
+   Can we use SNMP agent to manage route tables?
+
+   snmp_mib2_ip.c is a pretty descent reference to look at. We should
+   be able to read 
+
+** TODO DHCP Relay agent on the nodes
+   Using a relay agent, I believe we can then have a MESH network
+   ----------------------------------------
+   [2020-09-11 Fri] We might be able to get things to work simply by
+   enabling the interfaces =flags= bitmask to NETIF_FLAG_BROADCAST
+
+** TODO How do we set the dhcp information for AP on a mote
+
+   If we can't get a global DHCP solution from the manager to work, a
+   second option would be to send dhcp info to motes to dish out.
+
+** TODO micropython AP's showing up 
+
+   In the test bed, I have micropython nodes from public nightly
+   builds that are connecte to my test network as STA.  I still see
+   them as AP's from laptops and phones.  They litterally have
+   MicroPython-* in their SSID, which I did't write.
+
+* Milestones
+
+** TODO update the range test code to print out routing info
+   Using the c toolkit, update the images so that we can see the DHCP
+   broadcasts on the AP interfaces
+
+** TODO micropythonn with APSTA and LR
+   [2020-09-10 Thu] Note:  This only gives us 1 hop of help.  We could
+   deploy with an EM and a ring of next hops, each with a second ring 
+   of child nodes, so about 2k feet radius away from the EM.
+
+   We know that AP mode works in micropython, so dhcps must be
+   working.  I am not sure what the lease time is on this, but we
+   might be able to change that at compile time at the very least.
+
+** TODO set lease times in freertos dhcps               :dhcps:mote:freertos:
+   Can we do this?  If so document here a working example.  We want
+   low lease times when we are commissioning a network.  We will give
+   very generic information out as we automatically add nodes, which
+   then will be adapted as we see more and more nodes thus getting a
+   better picture of what in being installed.
+
+** TODO RSSI neighbor info for mote delievered to server
+   Have a mote connect as a station to an manager and display it's
+   nearest neighbor's RSSI information.
+
+
+** TODO DHCP through 2+ hops
+   Deploy a system that automatically configures a MESH network with
+   2+ HOPS using a single DHCP server.  
+
+
+* Engineering Summary
+
+** Components
+*** management aggregators
+   A typical scenerio will have one or more managers, which are
+   embedded linux systems with WiFi and ethernet and
+
+*** motes
+   We are using ESP32 systems, using the LR and APSTA features.  Even
+   though this is proprietary tech, it works inside of WiFi 802.11*
+   systems. 
+
+
+** IPv4 based
+   Large IPv4 Networks can easily be deployed.
+
+
+** WIFI Transmission Distance                                         :axiom:
+   - Normal A/B/G/N transmission is in the 300-400 ft range
+   - ESP32's have a LR mode that 3x's that From our simplistic testing
+     [2020-09-10 Thu], this is on par with Ember Zigbee.
+  
+
+** DHCP server
+
+   This project has implemented it's own DHCP server that will dish
+   out IP and routing tables to the motes.  As of [2020-09-10 Thu], we
+   still need to prove that will work
+   
+
+* Terms
+** Lost mode                                                           :term:
+** Factory Reset                                                       :term:
+   A mote
+** 1 hop
+   The list of wireless devices that a target device can transmit and
+   receive from.  
+
+** Nodes are active actors
+   
+
+  The nodes scan, and then join a network.
+
+  If they receive a network stick, they will then bring up their AP 
+  
+
+** Bringing up the AP.
+   A message with the IP address needs to be sent from the EM
+
+   We need to set the addresses/network to dish out for DHCP addresses
+
+
+* Overview of concerns
+
+** security
+   Network profiling and monitoring.  The gateway will monitory all
+   traffic to and from the MOTE net.  When anomalous behavior is
+   detected, automatic mitigations will be enacted.
+
+
+** costs
+   These open architectures will ensure that customers have the power
+   in the relationship, and the costs and the features will be driven
+   to their best cases.
+
+
+** Openess and lockin
+
+
+* Dealbreakers
+
+** TODO dhcp relays                                          :dhcp:mote:risk:
+   Related to: [[*dhcp broadcast cycles][dhcp broadcast cycles]].  
+
+   =The solution is using a DHCP Relay Agent. Routers that are RFC
+   1542 compliant have the ability to act as DHCP Relay Agents.=
+
+
+** TODO routing tables given dhcp relays are working
+   How will we manage the MESH?  The esp-mesh stuff stores [[https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/mesh.html#mesh-concepts][routing]]
+   tables for everythings?  I don't see how that scales.  
+
+** TODO dhcp broadcast cycles                                :risk:mote:dhcp:
+   Related to: [[*dhcp relays][dhcp relays]]
+
+   Can we do DHCP broadcasts, is there a HOP count?  We need to stop
+   forwarding these broadcasts if the is a cycle.
+
+   We need to test that we can get DHCP messages through our MESH.
+   [[http://www.itgeared.com/articles/1112-dhcp-relay-agent/]] 
+
+
+** TODO rssi neighbor information                                 :risk:mote:
+   - The devices can perform a scan to get AP nodes in their space
+   - libpcap information has rssi Can we simply watch traffic to get
+     this?  It's the first octet in the frame
+
+
+
+
+
+* TODO Add the range test code to this repository                    :mar:  
+* TODO don't use freertos dhcp server                       :q:freertos:dhcp:
+* TODO Put together a plan that is good enough for public consumption   :mar:
+* TODO motes must send back rssi info of possible 1-hop neighbors
+
+* Mesh Networking   
+
+** Overview
+   The ESP32 provides two new features to standard WiFi; LR mode and
+   APSTA, that make it suitable for large scale deployments, replacing
+   RS485, Zigbee, or other proprietary solutions.
+
+   The APSTA basically creates two interfaces, one a STA interface
+   links this device to a network, like a =parent= node, while the AP allows
+   the mote to add =child= nodes.
+
+** Joining a network (commissioning)
+
+*** Use Cases
+**** Big initial install
+    We are installing 800 thermostats in a building.  We don't want to
+    have to hit a per device web page 800x to set the AP.
+
+
+**** A thermostat get's busted 3 years later, and we need to replace
+     This is a big mesh.  There thermostat is 10 hops away from the
+     EM.  The installer installs the thermostat, but she doesn't know
+     anything about this system.  How do we get it to communicate?
+
+     Zigbee allows the system to turn =joining= on at the network level.  
+
+***** AP should show up from scans
+    If our nodes are periodically scanning and returning scan results
+    to the manager, we should see the out-of-factory SSID of the AP.  We
+    can have the nearest MOTE under management send configuration data
+    to the mote.
+    
+    the mote closest to the target audience leaves the network, joins
+    the AP's network and provides sign-on information for the
+    building's network.
+
+
+**** Large scale power loss
+     This is the movie studio scenario.  They will power down whole
+     circuits of the building to stop random shit from happening, say
+     the HVAC system turning on and blowing the hair of the star when
+     they are shooting an outer space scene.  Anyway, things need to
+     work so smarts have to be distributed out into the MESH.
+
+*** Solutions
+**** AP mode from factory
+     Walk the building with a simple transmitter that automatically
+     sets the PASSWORD for devices.
+ 
+
+   Two major modes of operation.
+
+   - A large network deployment with aggregators to provide management.
+   - Stand alone networks butt-simple installation
+     - Single room control
+
+
+   
+
+** DHCP use cases
+   Demonstrate how typical deployment scenerios will be met by proposed solutions.
+
+*** star topology
+    invision the gateway as the top of the tree.  How do we allocate
+    dhcp networks to nodes?
+
+*** Linked list
+    Consider a highway of lights.  There will be long stretches where
+    there won't be any MESH, rather the topology will be a linear
+    list.
+
+** Overview of routing
+*** Each of the motes are in APSTA mode.          :freertos:mote:axiom:apsta:
+*** DHCP is handled by EM                                             :axiom:
+*** DHCP server on EM sets route table on mote         :q:freertos:dhcp:risk:
+*** motes send rssi information of neighbors                 :mote:risk:dhcp:
+
+
+*** DHCP Operations
+  
+**** distributed dhcps (freertos)                       :mote:dhcps:freertos:
+    Use the dhcps and dhcpc freertos services and have an application
+    message that sets the configuration info from the server.
+
+**** server dhcps                                             :manager:dhcps:
+
+
+* Mote Applications
+  These are working motes I have up and running.  These have not been
+  integrated with the IOT mesh networking yet.
+
+** CO2 Sensor
+  
+   Uses - measure how well your building is exchanging outside air.  The theory is it
+   is a measures how much of 'breath' is in the building.
+
+   - writes PPM to the display (128x32)
+
+     Display Driver, [[https://www.twobitarcade.net/article/oled-displays-i2c-micropython/]]
+
+     [[https://github.com/micropython/micropython/blob/master/drivers/display/ssd1306.py]]
+ 
+     [[http://www.dsdtech-global.com/2018/05/iic-oled-lcd-u8glib.html]]
+
+    
+   [[https://www.amazon.com/gp/product/B07D9H83R4/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&psc=1]]
+
+   - sends ppm info to server
+
+
+** Tstat                                                          :mote:plan:
+
+   We will initially provide solutions controlling off-the-shelf rs485
+   modbus thermostats, and will develop and ship our own thermostat
+   using off the shelf components as soon as cash flow allows.
+
+   Buildings currently use *40%* of our energy and 70% of our
+   electricity.  A smart thermostat solution can cut energy use and
+   costs by 50% or more, and give visability into building to diagnose
+   issues to bring about even more savings.
+
+   [[https://www.ase.org/initiatives/buildings]]
+
+   https://www.eia.gov/tools/faqs/faq.php?id=86&t=1
+
+
+   Remember the 1 degree rule.  Every set-point degree you change your
+   thermostat typically doubles your savings.  So if you are cooling
+   your office down to 70 degrees so people can wear ties, going to 72
+   degrees and having them wear short sleeves cuts your energy usage
+   by 4x.
+
+*** TODO Take picture of working thermostats and uplod
+
+*** TODO Display cost savings
+
+
+** soil sensors
+
+
+* External Links
 - [[https://cdn-learn.adafruit.com/assets/assets/000/044/636/original/CCS811_DS000459_2-00-1098798.pdf][CCS811]] datasheet
 - [[https://drive.google.com/drive/folders/1o8dseCsrrxkg5uQ3fIn7ZGpt_6Q_jbUd][AdaFruit Sample code]]
 - [[https://wiki.keyestudio.com/KS0457_keyestudio_CCS811_Carbon_Dioxide_Temperature_Air_Quality_Sensor][Butt simple Integration Board]]
@@ -14,40 +338,3 @@
  | [[https://botland.com.pl/en/the-gas-sensors/8110-gravity-analog-infrared-co2-sensor-for-arduino-050000-ppm.html]] |
  | [[https://wiki.dfrobot.com/CO2_Sensor_SKU_SEN0159]]                                                               |
 
-
-
-
-* CO2 Sensor
-  
-  Uses - measure how well your building is exchanging outside air.  The theory is it
-  is a measures how much of 'breath' is in the building.
-
-  - writes PPM to the display (128x32)
-
-    Display Driver, [[https://www.twobitarcade.net/article/oled-displays-i2c-micropython/]]
-
-    [[https://github.com/micropython/micropython/blob/master/drivers/display/ssd1306.py]]
- 
-    [[http://www.dsdtech-global.com/2018/05/iic-oled-lcd-u8glib.html]]
-
-    
-  [[https://www.amazon.com/gp/product/B07D9H83R4/ref=ppx_yo_dt_b_asin_title_o03_s00?ie=UTF8&psc=1]]
-
-  - sends ppm info to server
-
-
-
-
-* Tstat
-#+name:
-#+BEGIN_SRC python
- return (1, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30, 216, 50, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 64757, 50348, 48318, 29, 0, 0, 0, 0, 450, 50, 1, 0, 2, 170, 0, 70, 0, 347, 180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 8, 0, 210, 0, 9, 30, 160, 0, 16, 30, 220, 0, 23, 0, 170, 0, 8, 0, 210, 0, 9, 30, 160)
-#+END_SRC
-
-#+RESULTS:
-| 1 | 29 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 20 | 30 | 216 | 50 | 0 | 0 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 64757 | 50348 | 48318 | 29 | 0 | 0 | 0 | 0 | 450 | 50 | 1 | 0 | 2 | 170 | 0 | 70 | 0 | 347 | 180 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 8 | 0 | 210 | 0 | 9 | 30 | 160 | 0 | 16 | 30 | 220 | 0 | 23 | 0 | 170 | 0 | 8 | 0 | 210 | 0 | 9 | 30 | 160 |
-
-
-#+BEGIN_SRC lisp
-
-#+END_SRC

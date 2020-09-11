@@ -9,6 +9,8 @@ from time import sleep
 
 wlan = network.WLAN(network.STA_IF) # create station interface
 
+wlanAP = network.WLAN(network.STA_AP)
+
 ## All of the motes store their info in /c.json.  We load up the ssid
 ## and the password to join the network here.
 config = []
