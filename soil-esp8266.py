@@ -1,3 +1,4 @@
+esp.osdebug(0)
 import struct, socket, network, ubinascii
 
 from machine import Pin, ADC, deepsleep

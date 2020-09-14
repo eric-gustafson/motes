@@ -2,14 +2,14 @@
 
 ## Purpose: General utilities for all of the motes.  The little CPU's that are common
 ## to the solution who are running micropython programs.
-import sys, struct, utime, socket, network, uhashlib, urequests
+import sys, struct, utime, socket, network, uhashlib#, urequests
 import ujson ## config info
 import uselect
 from time import sleep
 
 wlan = network.WLAN(network.STA_IF) # create station interface
 
-wlanAP = network.WLAN(network.STA_AP)
+#wlanAP = network.WLAN(network.STA_AP)
 
 ## All of the motes store their info in /c.json.  We load up the ssid
 ## and the password to join the network here.

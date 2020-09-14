@@ -1,6 +1,7 @@
 #+title: Game Plan
 #+author: Eric Gustafson
 
+
 * Executive Summary
 
   Wireless MESH networking can greatly decrease costs for 
@@ -10,27 +11,82 @@
   
   The goal of the repo is to plan and then provide working Code and
   documentation to prove or disprove that we can use ESP4866 and ESP32
-  FREERTOS based system for large scale industrial deployments.
+  FREERTOS based system for large scale industrial deployments,
+  consisting of 10-20k nodes.
 
-* Open Questions
+  The ESP-IDF does have a mesh library:
 
-  I think we can have a working MESH with a dhcps server dishing out
-  networks, a dhcp network relay, and the ability to set network route
-  table entries on the nodes from the aggregator.
+#+BEGIN_SRC  :export both
+  git clone --recursive https://github.com/espressif/esp-mdf.git
+#+END_SRC
 
-** TODO show snippit of code that will set a route table in freertos
-   ip4.c has a function ip_forward
+  this is probably the smart way to go, but ...  according to my
+  reading of this documentation:
+  https://docs.espressif.com/projects/esp-idf/en/stable/api-guides/mesh.html
+  
+  The route tables for any particular node is the entire subtree,
+  which is going to greatly limit scalability.  Also, as of
+  [2020-09-11 Fri], I don't see the source code for esp_mesh_init(),
+  but I see it in a map file, so I wonder if it's open-source?
 
-   Can we use SNMP agent to manage route tables?
+  Additionally, the range for wifi is ~300ft, while Zigbee is 3x-4x
+  that.  The esp chips have a new LR mode of operation, which extends
+  the range into the Zigbee type range.  You trade throughput for
+  range, but with the ability to have an LR station make connect to a
+  regular AP, it's a great way to easily deploy.
 
-   snmp_mib2_ip.c is a pretty descent reference to look at. We should
-   be able to read 
+* Currently Working on
+  DEADLINE: <2020-09-12 Sat>
+  Putting broadcast flag into each of the interfaces in micropython to
+  test if we can broadcast through dual interface nodes.
 
-** TODO DHCP Relay agent on the nodes
-   Using a relay agent, I believe we can then have a MESH network
-   ----------------------------------------
-   [2020-09-11 Fri] We might be able to get things to work simply by
-   enabling the interfaces =flags= bitmask to NETIF_FLAG_BROADCAST
+* Dealbreakers
+  The following are the top reasons that this might not work.  I'm working through
+  these 1 at a time.
+
+  Currently, we are going to try and broadcast in the MESH, and manage
+  route tables using simple broadcasts as a proof-of-concept.  Later
+  on, we will use snmp or mqtt ... to CRUD this kind of info.
+
+** DHCP
+*** TODO dhcp relays                                         :dhcp:mote:risk:
+    Related to: [[*dhcp broadcast cycles][dhcp broadcast cycles]].  
+
+    =The solution is using a DHCP Relay Agent. Routers that are RFC
+    1542 compliant have the ability to act as DHCP Relay Agents.=
+
+    DHCP relays decrement a HOP count variable in the payload, which stops
+    cycles.
+
+    [[http://www.itgeared.com/articles/1112-dhcp-relay-agent/]] 
+
+    =----------- HACK -----------------------=
+    
+    [2020-09-11 Fri] We might be able to prove things will/won't work
+    simply by enabling the interfaces =flags= bitmask to
+    NETIF_FLAG_BROADCAST, and broadcasting messages to 255.255.255.255
+    using IP_NONE (0.0.0.0) as the destination (dhcp might do this).
+
+
+** Routing
+*** TODO routing tables given dhcp relays are working
+    How will we manage the MESH?  The esp-mesh stuff stores [[https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/mesh.html#mesh-concepts][routing]]
+    tables for everythings?  I don't see how that scales.  
+
+    I looked @ the snmp stuff, and I don't see how to write a table in that code base.
+
+*** TODO show snippit of code that will set a route table in freertos
+    ip4.c has a function ip_forward
+    
+    Can we use SNMP agent to manage route tables?
+
+    snmp_mib2_ip.c is a pretty descent reference to look at. We should
+    be able to read 
+
+** TODO rssi neighbor information                                 :risk:mote:
+   - The devices can perform a scan to get AP nodes in their space
+   - libpcap information has rssi Can we simply watch traffic to get
+     this?  It's the first octet in the frame
 
 ** TODO How do we set the dhcp information for AP on a mote
 
@@ -43,6 +99,13 @@
    builds that are connecte to my test network as STA.  I still see
    them as AP's from laptops and phones.  They litterally have
    MicroPython-* in their SSID, which I did't write.
+
+
+* Open Questions
+
+  I think we can have a working MESH with a dhcps server dishing out
+  networks, a dhcp network relay, and the ability to set network route
+  table entries on the nodes from the aggregator.
 
 * Milestones
 
@@ -88,17 +151,14 @@
    though this is proprietary tech, it works inside of WiFi 802.11*
    systems. 
 
-
 ** IPv4 based
    Large IPv4 Networks can easily be deployed.
-
 
 ** WIFI Transmission Distance                                         :axiom:
    - Normal A/B/G/N transmission is in the 300-400 ft range
    - ESP32's have a LR mode that 3x's that From our simplistic testing
-     [2020-09-10 Thu], this is on par with Ember Zigbee.
+     [2020-09-10 Thu], this is on par with SiLabs/Ember Zigbee.
   
-
 ** DHCP server
 
    This project has implemented it's own DHCP server that will dish
@@ -108,15 +168,11 @@
 
 * Terms
 ** Lost mode                                                           :term:
-** Factory Reset                                                       :term:
-   A mote
 ** 1 hop
    The list of wireless devices that a target device can transmit and
    receive from.  
 
 ** Nodes are active actors
-   
-
   The nodes scan, and then join a network.
 
   If they receive a network stick, they will then bring up their AP 
@@ -143,36 +199,6 @@
 
 
 ** Openess and lockin
-
-
-* Dealbreakers
-
-** TODO dhcp relays                                          :dhcp:mote:risk:
-   Related to: [[*dhcp broadcast cycles][dhcp broadcast cycles]].  
-
-   =The solution is using a DHCP Relay Agent. Routers that are RFC
-   1542 compliant have the ability to act as DHCP Relay Agents.=
-
-
-** TODO routing tables given dhcp relays are working
-   How will we manage the MESH?  The esp-mesh stuff stores [[https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/mesh.html#mesh-concepts][routing]]
-   tables for everythings?  I don't see how that scales.  
-
-** TODO dhcp broadcast cycles                                :risk:mote:dhcp:
-   Related to: [[*dhcp relays][dhcp relays]]
-
-   Can we do DHCP broadcasts, is there a HOP count?  We need to stop
-   forwarding these broadcasts if the is a cycle.
-
-   We need to test that we can get DHCP messages through our MESH.
-   [[http://www.itgeared.com/articles/1112-dhcp-relay-agent/]] 
-
-
-** TODO rssi neighbor information                                 :risk:mote:
-   - The devices can perform a scan to get AP nodes in their space
-   - libpcap information has rssi Can we simply watch traffic to get
-     this?  It's the first octet in the frame
-
 
 
 
@@ -267,6 +293,25 @@
     message that sets the configuration info from the server.
 
 **** server dhcps                                             :manager:dhcps:
+
+
+* Mote Design Doc
+
+** Commissioning
+   A mote comes out of the factory in AP mode.  An onboard webserver
+   allows SSID and password to be provided, then the mote will
+   actively join networks with substring ssid with that passord.
+
+   A factory password of 'devogirluwant' is assigned at the factory.
+   Upon power on, or in =lost mode=, the mote will actively scan all
+   networks and try to join them with this password.
+
+** Application Watchdog Stick
+   A network watchdog message is sent to all motes on the network.
+   The watchdog message has the new watchdog-timer value that the mote
+   will stay on the network, waiting for another watchdog message.  If
+   no message arives in that time, it leaves the network and starts
+   the active scan loop searching for a new home.
 
 
 * Mote Applications
