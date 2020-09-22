@@ -2,28 +2,89 @@
 
 ## Purpose: General utilities for all of the motes.  The little CPU's that are common
 ## to the solution who are running micropython programs.
-import sys, struct, utime, socket, network, uhashlib#, urequests
+import esp,sys, struct, utime, socket, network, uhashlib#, urequests
 import ujson ## config info
 import uselect
 from time import sleep
 
-wlan = network.WLAN(network.STA_IF) # create station interface
+import dhcpgw
 
-#wlanAP = network.WLAN(network.STA_AP)
+mode = None
+
+STA = None
+AP = None
 
 ## All of the motes store their info in /c.json.  We load up the ssid
 ## and the password to join the network here.
 config = []
-
-try:
-    if wlan.active():
-        if wlan.isconnected():
-            wlan.disconnect()
-        wlan.active(False)
-except Exception as e:
-    print ("miot",str(e))
-    
 init_time = 0
+
+OnNetTimer = None
+
+def ap_up():
+    if not AP.isconnected():
+        print("miot.mesh: AP up")
+        AP.config(essid='iotnet', channel=5,password='bustergus25',authmode=network.AUTH_WPA_WPA2_PSK)
+        AP.connect()
+        OnNetTimer = Timer()
+
+def ap_down():
+    print("miot.mesh: AP down")
+    AP.disconnect()
+    OnNetTimer = None
+
+def OnNet():
+    if OnNetTimer:
+        return OnNetTimer.delta()
+    else:
+        return 0
+    
+## Bring down the interfaces.  I am doing this during the development
+## phase, but don't think I need to do this when we stabilize.
+def wifi_startup():
+    global STA,AP
+    try:
+        print("wifi_startup:",STA)
+        if STA.isconnected():
+            STA.disconnect()
+    except Exception as e:
+        print ("miot",str(e))
+
+    try:
+        if AP.isconnected():
+            AP.disconnect()
+    except Exception as e:
+        print ("miot",str(e))
+
+def mesh_init():
+    global mode, STA, AP
+    print("mesh_init")
+    STA = network.WLAN(network.STA_IF) # create station interface
+    AP = network.WLAN(network.AP_IF)
+    network.ebroadcasts()
+
+    mode = network.mode()
+    print("wireless mode=%d"%(mode))
+    network.mode(network.MODE_APSTA)
+    print("mode=%d"%(mode))
+
+
+    STA.protocol(network.MODE_11B|network.MODE_11G|network.MODE_11N|network.MODE_LR) #STA.protocol(network.MODE_LR)
+    AP.protocol(network.MODE_11B|network.MODE_11G|network.MODE_11N|network.MODE_LR)  #AP.protocol(network.MODE_LR);
+
+    network.active(True) # esp_wifi_start
+    AP.config(essid='iotnet', channel=5,password='bustergus25',authmode=network.AUTH_WPA_WPA2_PSK)
+
+    #wlan.ifconfig()         # get the interface's IP/netmask/gw/DNS addresses
+
+    #print (x)
+    STA.disconnect()
+    #nets = STA.scan()
+    #print("nets:",nets)    
+
+
+    wifi_startup()
+    AP.dhcps(0) ## brings down the dhcps server
 
 def uptime ():
     global init_time
@@ -38,6 +99,14 @@ def log (*args):
     newargs = tuple([uptime_s(),":"]) + args
     print(*newargs)
 
+class Timer:
+    start = None
+    def __init__(self):
+        self.start = utime.ticks_ms()
+
+    def delta():
+        now = utime.ticks_ms()
+        return now-self.start
 
 class Watchdog:
     last = None
@@ -92,7 +161,7 @@ server = None
 snd_socket = None
 rcv_socket = None
 
-def shutdown_comms():
+def comms_down():
     """When the mote switches networks, it should shutdown the sockets and
 then bring them back up when a new home is found.
 
@@ -104,20 +173,23 @@ then bring them back up when a new home is found.
     if rcv_socket:
         rcv_socket.close()
         rcv_socket = None
-
-def initCommunications():
-    global poll,server,snd_socket,rcv_socket
-    if wlan.active() and wlan.isconnected() and not snd_socket:
+    dhcpgw.comms_down()
+    
+def comms_up():
+    global poll,server,snd_socket,rcv_socket,STA,AP
+    #print("comms_up:",STA)
+    if STA and STA.isconnected() and not snd_socket:
         snd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         rcv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         snd_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)        
         rcv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        [_,_,server,_] = wlan.ifconfig()
+        [_,_,server,_] = STA.ifconfig()
         ## No bind on the sending socket
         #snd_socket.bind((server,3333))
         rcv_socket.bind(('0.0.0.0',3333))
         poll = uselect.poll()
         poll.register(rcv_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
+        dhcpgw.comms_up()
         return True
     return False
 
@@ -134,15 +206,16 @@ def addHook(thunk):
     if not thunk in msgHooks:
         msgHooks.append(thunk)
 
-def distributeMsgToListeners(msg):
+def distributeMsgToListeners(msg,addr):
     for e in msgHooks:
         try:
-            e(msg)
+            e(msg,addr)
         except Exception as e:
             print(e)
 
-def logMsg(buff):
-    print("processing msg:",buff)
+def logMsg(buff,addr):
+    print("processing msg:",buff,":",addr)
+    print("todo: handle addr correctly")
 
 
     
@@ -151,8 +224,8 @@ def tic(waitTime_ms):
 send messages on the first invocation and receives messages on
 subsequent invocations"""
     global poll, rcv_socket
-    initCommunications()
     addHook(logMsg)
+    comms_up()
     #print("hooks:",msgHooks)
     if poll:
         #print ("connected, checking for events")
@@ -161,14 +234,14 @@ subsequent invocations"""
         for s, flag in events:
             if flag & uselect.POLLIN:
                 buff,address = rcv_socket.recvfrom(512)
-                distributeMsgToListeners(buff)
+                distributeMsgToListeners(buff,address)
                 sleep(waitTime_ms/1000)
                 return True
     return False
 
 def snd_reporting_event(tag,value):
-    global wlan
-    mac = wlan.config('mac')
+    global STA
+    mac = STA.config('mac')
     smac = "%x:%x:%x:%x:%x:%x" % struct.unpack("BBBBBB",mac)
     buf = "%s,%s,%d,%d" % (smac, tag,value, uptime())
     sndmsg(buf)
