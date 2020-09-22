@@ -42,13 +42,13 @@ while True:
     miot.tic(20)
     netdog.tic()
     onNet = miot.OnNet()
+    print("on-net:", onNet)
     if onNet > 0:
-        print("on-net:", onNet)
         dhcpgw.tic(5000)
     else:
         sleep(5)
     ttl = sampleTime.msecs_left()
-    print("next sample in:",ttl)
+    #print("next sample in:",ttl)
     if ttl <= 0:
         sampleTime.reset()
         print (i,":",av)

@@ -44,7 +44,7 @@ def nextNet():
 def dogTickIsConnected():
     """ Run the watchdog connected function.  Check if the timer to see if we should disconnect"""
     tl = NetWD.msecs_left()
-    print ("time expired?:", "time left:", tl)
+    print ("network-watchdog-timer:", tl)
     if tl <= 0:
         miot.comms_down()
         network.active(False)
@@ -74,7 +74,7 @@ def dogTickIsNotConnected():
         ttl = NetWD.msecs_left()
         print("guest wdt:",ttl/1000)
         i = 0;
-        while not miot.STA.isconnected() and i < 20: 
+        while not miot.STA.isconnected() and i < 30: 
             print("! connected",i)
             i = i + 1
             sleep(1)
@@ -85,12 +85,14 @@ def dogTickIsNotConnected():
 def networkHeartBeat(messg,addr):
     msg = messg.decode('utf-8')
     a,b,*rest = msg.split()
+    ip,port = addr
     if a == u'stay':
         print("network watchdog received:", b)
         NetWD.set_msecs(1000*int(b))
         NetWD.reset()
-        miot.ap_up()
-
+        if miot.OnNet() == 0:
+            miot.ap_up()
+        miot.RootServer = ip
 
 def init():
     #print("initializing netdog")
@@ -103,7 +105,7 @@ mote.  This function returns True if it's on the network, False if
 not.
 
     """
-    miot.log ("netdog.tic:", miot.STA, ",AP=", miot.AP.ifconfig())
+    miot.log ("netdog.tic:root=", miot.RootServer, ",STA=",miot.STA, ",AP=", miot.AP.ifconfig())
     init()
     #print("hooks",miot.msgHooks)
     #print ("test connectivity")

@@ -9,8 +9,8 @@ import uselect
 DHCP_SERVER_PORT = 67
 DHCP_CLIENT_PORT = 68
 
-dhcp_client_socket = None
-dhcp_server_socket = None
+sta_dhcp_client_socket = None
+ap_dhcp_server_socket = None
 
 poll = None
 
@@ -46,48 +46,75 @@ def initSocket(IFACE, PORT):
 ## side and broadcasting to the other.
 
 def comms_up():
-    global poll, dhcp_client_socket, dhcp_server_socket
+    global AP, STA, poll, sta_dhcp_client_socket, ap_dhcp_server_socket
     print("dhcpgw.comms_up")    
     if (AP == None) or (STA == None):
         raise Exception("initIfaces needs to be initiated")
-    dhcp_server_socket = initSocket(AP, DHCP_SERVER_PORT)
-    dhcp_client_socket = initSocket(STA, DHCP_CLIENT_PORT)
+    ap_dhcp_server_socket = initSocket(AP, DHCP_SERVER_PORT)
+    sta_dhcp_client_socket = initSocket(STA, DHCP_CLIENT_PORT)
     poll = uselect.poll()
-    poll.register(dhcp_client_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
-    poll.register(dhcp_server_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
+    poll.register(sta_dhcp_client_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
+    poll.register(ap_dhcp_server_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
     return True
 
 def comms_down():
     ## TODO: test that we don't have to unregister
+    global poll, sta_dhcp_client_socket, ap_dhcp_server_socket
     print("dhcpgw.comms_down")
     poll = None
-    for sock in [dhcp_client_socket, dhcp_server_socket]:
+    for sock in [sta_dhcp_client_socket, ap_dhcp_server_socket]:
         sock.shutdown()
         sock.close()
     
-
-def set_giaddr(packetbuff):
+def get_giaddr(pbuff):
+     return pbuff[48:52]
+ 
+def set_giaddr_using_sta_addr(packetbuff):
+    "Set's the GIADDR part of the packet using the STA address"
     #octets 48-51
+    global STA
+    ip,nm,gw,dnss = STA.ifconfig()    
+    j = 0
+    for i in ip.split('.'):
+        packetbuff[48 + j] = int(i)
+        j += 1
     return packetbuff;
 
+def incHops(pbuff):
+    hi = int(pbuff[3]) #getHops(pbuff)
+    hi += 1
+    pbuff[3] = hi
+
+def getHops(pbuff):
+    [n] = struct.unpack("xxxb",pbuff[0:4])
+    return n
+    
 ## TODO: Send the dhcp inbound (from teh dhcpc) to the
 ## gateway.
 ##
 ## Should only be called when the AP is up.  We receive DHCP on the AP connection
 ## and unicast them to the root server.
 def tic(waitTime_ms):
-    if poll:
-        events = poll.poll(waitTime_ms)
-        print ("dhcpgw.poll.events: ",events)
-        for socket, flag in events:
-            if flag & uselect.POLLIN:
-                buff,address = socket.recvfrom(512)
-                print("address:",address)
-                print("check the address. if 255.255.255.255 the forward to the other interface")
-                forward_packet(buff,toaddress)
-                op,htype,hlen,hops = buff
-                buff[3] = 1 + hops
-                if socket == dhcp_server_socket:
-                    dhcp_client_socket.sendto(buff,('255.255.255.255',DHCP_CLIENT_PORT))
-                else:
-                    dhcp_server_socket.sendto(buff,('255.255.255.255',DHCP_SERVER_SOCKET))
+    global poll,sta_dhcp_client_socket, ap_dhcp_server_socket
+    try:
+        if poll:
+            events = poll.poll(waitTime_ms)
+            print ("dhcpgw.poll.events: ",events)
+            for socket, flag in events:
+                if flag & uselect.POLLIN:
+                    buff,address = socket.recvfrom(512)
+                    babuff = bytearray(buff)
+                    print("DHCPGW MESSAGE:",address)
+                    #forward_packet(buff,toaddress)
+                    incHops(babuff)
+                    set_giaddr_using_sta_addr(babuff)
+                    print("hop count:",getHops(babuff))
+                    set_giaddr_using_sta_addr(babuff)
+                    print("giaddr:",get_giaddr(babuff))
+                    buff = bytes(babuff)
+                    if socket == ap_dhcp_server_socket:
+                        sta_dhcp_client_socket.sendto(buff,(miot.RootServer,DHCP_SERVER_PORT))
+                    else:
+                        ap_dhcp_server_socket.sendto(buff,('255.255.255.255',DHCP_CLIENT_PORT))
+    except Exception as e:
+        print("dhcpgw.tic:",e)

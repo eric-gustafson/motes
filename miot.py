@@ -9,6 +9,7 @@ from time import sleep
 
 import dhcpgw
 
+########################################
 mode = None
 
 STA = None
@@ -21,19 +22,56 @@ init_time = 0
 
 OnNetTimer = None
 
+#cs = None
+poll = None
+server = None
+
+snd_socket = None
+rcv_socket = None
+
+RootServer = None
+
+########################################
+class Timer:
+    start = None
+    def __init__(self):
+        self.start = utime.ticks_ms()
+    def delta(self):
+        now = utime.ticks_ms()
+        return now-self.start
+
+class Watchdog:
+    last = None
+    msecs = None
+    def set_msecs(self,msecs):
+        self.msecs = msecs
+    def __init__(self, msecs):
+        self.set_msecs(msecs)
+        self.reset()
+    def msecs_left(self):
+        now = utime.ticks_ms()        
+        return self.msecs - (now - self.last)        
+    def reset(self):
+        self.last =  utime.ticks_ms()
+
+########################################
 def ap_up():
+    global AP, OnNetTimer
     if not AP.isconnected():
         print("miot.mesh: AP up")
         AP.config(essid='iotnet', channel=5,password='bustergus25',authmode=network.AUTH_WPA_WPA2_PSK)
         AP.connect()
-        OnNetTimer = Timer()
+        if not OnNetTimer:
+            OnNetTimer = Timer()
 
 def ap_down():
+    global AP, OnNetTimer    
     print("miot.mesh: AP down")
     AP.disconnect()
     OnNetTimer = None
 
 def OnNet():
+    global OnNetTimer    
     if OnNetTimer:
         return OnNetTimer.delta()
     else:
@@ -99,32 +137,6 @@ def log (*args):
     newargs = tuple([uptime_s(),":"]) + args
     print(*newargs)
 
-class Timer:
-    start = None
-    def __init__(self):
-        self.start = utime.ticks_ms()
-
-    def delta():
-        now = utime.ticks_ms()
-        return now-self.start
-
-class Watchdog:
-    last = None
-    msecs = None
-
-    def set_msecs(self,msecs):
-        self.msecs = msecs
-
-    def __init__(self, msecs):
-        self.set_msecs(msecs)
-        self.reset()
-
-    def msecs_left(self):
-        now = utime.ticks_ms()        
-        return self.msecs - (now - self.last)        
-
-    def reset(self):
-        self.last =  utime.ticks_ms()
     
 ## Reboot the mote if we haven't been able to connect for
 ## an hour.
@@ -154,12 +166,6 @@ def durationString(us_duration):
     str = "%ds" % (s)
     return str
 
-#cs = None
-poll = None
-server = None
-
-snd_socket = None
-rcv_socket = None
 
 def comms_down():
     """When the mote switches networks, it should shutdown the sockets and
@@ -215,9 +221,6 @@ def distributeMsgToListeners(msg,addr):
 
 def logMsg(buff,addr):
     print("processing msg:",buff,":",addr)
-    print("todo: handle addr correctly")
-
-
     
 def tic(waitTime_ms):
     """ This should be called from the main loop.  Setups of the socket to
