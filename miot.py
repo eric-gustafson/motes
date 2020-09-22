@@ -217,7 +217,7 @@ def distributeMsgToListeners(msg,addr):
         try:
             e(msg,addr)
         except Exception as e:
-            print(e)
+            print("distributeMsgToListeners:",e)
 
 def logMsg(buff,addr):
     print("processing msg:",buff,":",addr)

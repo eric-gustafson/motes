@@ -67,18 +67,29 @@ def comms_down():
         sock.close()
     
 def get_giaddr(pbuff):
-     return pbuff[48:52]
- 
+    return pbuff[48:52]
+
+#octets 48-51
+      
+def set_giaddr_using_straddr(packetbuff,ipaStr):
+    "Set's the GIADDR part of the packet using the STA address"
+    try:
+        j = 0
+        for i in ipaStr.split('.'):
+            packetbuff[48+j]=int(i)
+            j += 1
+        return packetbuff
+    except Execption as e:
+        print("set_giaddr_using_straddr:", e)
+    return None
+        
 def set_giaddr_using_sta_addr(packetbuff):
     "Set's the GIADDR part of the packet using the STA address"
     #octets 48-51
     global STA
-    ip,nm,gw,dnss = STA.ifconfig()    
-    j = 0
-    for i in ip.split('.'):
-        packetbuff[48 + j] = int(i)
-        j += 1
-    return packetbuff;
+    ip,nm,gw,dnss = STA.ifconfig()
+    return set_giaddr_using_sta_addr(packetbuff,ip)
+
 
 def incHops(pbuff):
     hi = int(pbuff[3]) #getHops(pbuff)
@@ -104,10 +115,8 @@ def tic(waitTime_ms):
                 if flag & uselect.POLLIN:
                     buff,address = socket.recvfrom(512)
                     babuff = bytearray(buff)
-                    print("DHCPGW MESSAGE:",address)
-                    #forward_packet(buff,toaddress)
+                    print("DHCPGW MESSAGE:",address,"\n")
                     incHops(babuff)
-                    set_giaddr_using_sta_addr(babuff)
                     print("hop count:",getHops(babuff))
                     set_giaddr_using_sta_addr(babuff)
                     print("giaddr:",get_giaddr(babuff))
