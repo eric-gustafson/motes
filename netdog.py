@@ -103,7 +103,6 @@ def tic():
 periodic basis, and if it fails a bunch of times it will reboot the
 mote.  This function returns True if it's on the network, False if
 not.
-
     """
     miot.log ("netdog.tic:root=", miot.RootServer, ",STA=",miot.STA, ",AP=", miot.AP.ifconfig())
     init()

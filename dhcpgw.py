@@ -122,8 +122,9 @@ def tic(waitTime_ms):
                     print("giaddr:",get_giaddr(babuff))
                     buff = bytes(babuff)
                     if socket == ap_dhcp_server_socket:
+                        print("root server '%s'" % (miot.RootServer))
                         sta_dhcp_client_socket.sendto(buff,(miot.RootServer,DHCP_SERVER_PORT))
                     else:
                         ap_dhcp_server_socket.sendto(buff,('255.255.255.255',DHCP_CLIENT_PORT))
     except Exception as e:
-        print("dhcpgw.tic:",e)
+        print("dhcpgw.tic.error:",e)

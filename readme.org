@@ -56,11 +56,14 @@
 *** TODO uses the exchanges to maintain network route tables on mote
     The EM can send each of these gateways ROUTE table info.
 
+
 *** TODO stick and gw will flatten network
     controlling the number of hops to flatten network Keep hops
     low @ first, so that nodes have to search to make a connection
     that is say, within 2-3 hops.  Only increase the hops threshold
     as needed to get nodes to =join=.
+
+
 
 * Dealbreakers
   The following are the top reasons that this might not work.  I'm working through
@@ -92,6 +95,17 @@
 
 ** Routing
 
+   netif_list: What if we add netif objects, one for each child network...
+
+   first try, return the first netif object.
+   *esp_scan* in modnetworks.c can be used as a model for returning netif* list.
+   *esp_ifconfig* is another good example of what I want to do.
+
+
+   [2020-09-22 Tue] There is also an esp_netif, which is different.  I
+   am looking into how it's related to the freertos structures.
+
+
 *** TODO routing tables given dhcp relays are working
     How will we manage the MESH?  The esp-mesh stuff stores [[https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/mesh.html#mesh-concepts][routing]]
     tables for everythings?  I don't see how that scales.  
@@ -106,14 +120,25 @@
     snmp_mib2_ip.c is a pretty descent reference to look at. We should
     be able to read 
 
-*** TODO +mtor like routing+
+*** TODO mtor like routing
     We could also use DHCP to dish out local networks, and MTOR like
     routes, with a radial (fractal really) incrementation strategy for
     #hops away from aggregator.  
 
+**** ??
     An aggregator is up and running.  It has 3 APSTA's connected to to
     it.  They each send an MTOR that make it to the aggregator.  DHCP
     addresses have already been allocated, so this doesn't work!
+
+    [2020-09-22 Tue] This does work, I don't understand the above
+    paragraph.  If we give different IP's to different nodes, then all
+    we have to do is have the aggregator put the hops into the
+    payload.  
+
+    [2020-09-22 Tue] We could ship product doing just this, not worringing
+    about getting routing working in FREERTOS 
+
+
 
 
 ** TODO rssi neighbor information                                 :risk:mote:
@@ -422,6 +447,7 @@
  | [[https://wiki.dfrobot.com/CO2_Sensor_SKU_SEN0159]]                                                               |
 
 
+* Code/Testing
 #+BEGIN_SRC python :results output 
   ##import file
   import struct
