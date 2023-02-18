@@ -35,14 +35,14 @@
   range, but with the ability to have an LR station make connect to a
   regular AP, it's a great way to easily deploy.
 
-* Currently Working on
-  DEADLINE: <2020-09-12 Sat>
 
+* Currently Working on                                             :iot:mote:
   - Using the stick command to maintain connectivity to the root.
   - dhcp gateway code onto each mote
     Integrate this into next version of miot.py
 
     A python dhcp-gateway module
+
 ** TODO  receives dhcp broadcast messages and forwards them to gateway
    [[file:~/xxx/mt.py]]
    [[file:~/xxx/miot.py]]

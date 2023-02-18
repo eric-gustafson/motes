@@ -7,28 +7,28 @@
 
 ## See the README.org file for more details
 
-import sys
-import utime
+import machine, sys,utime
 import network
 import ujson ## config info
 import miot
 from time import sleep
 
 NetWD = miot.Watchdog(60*1000)
+RebootWD = miot.Watchdog(1000*15*60)
 
 netscan = []
 ssid = None
 
 
-def leaveNet():
-    global ssid
-    miop.config.pop("ssid",None)
-    ssid = None
+# def leaveNet():
+#     global ssid
+#     miop.config.pop("ssid",None)
+#     ssid = None
 
-def stayNet():
-    global ssid
-    miop.config["ssid"] = ssid
-    save_config()
+# def stayNet():
+#     global ssid
+#     miop.config["ssid"] = ssid
+#     save_config()
     
 def appLock():
     val = config["ssid"]
@@ -75,24 +75,29 @@ def dogTickIsNotConnected():
         print("guest wdt:",ttl/1000)
         i = 0;
         while not miot.STA.isconnected() and i < 30: 
-            print("! connected",i)
+            #print("! connected",i)
             i = i + 1
             sleep(1)
+        print("is connected:",miot.STA.isconnected(),":",target)
     #miot.STA.connect(config["ssid"], config["pw"]) # connect to an AP
     
 ## 
 ## 
 def networkHeartBeat(messg,addr):
+    global RebootWD,NetWD
     msg = messg.decode('utf-8')
     a,b,*rest = msg.split()
     ip,port = addr
     if a == u'stay':
         print("network watchdog received:", b)
+        miot.RootServer = ip
+        RebootWD.reset()
         NetWD.set_msecs(1000*int(b))
         NetWD.reset()
         if miot.OnNet() == 0:
             miot.ap_up()
-        miot.RootServer = ip
+    else:
+        print("networkHeartBeat:",messg)
 
 def init():
     #print("initializing netdog")
@@ -104,10 +109,14 @@ periodic basis, and if it fails a bunch of times it will reboot the
 mote.  This function returns True if it's on the network, False if
 not.
     """
-    miot.log ("netdog.tic:root=", miot.RootServer, ",STA=",miot.STA, ",AP=", miot.AP.ifconfig())
+    print("netdog.tic:root=", miot.RootServer, ",STA=",miot.STA, ",AP=",miot.STA.ifconfig())
+    onNet =  miot.OnNet()
     init()
-    #print("hooks",miot.msgHooks)
-    #print ("test connectivity")
+    delta =  RebootWD.msecs_left()
+    if ( delta <= 0 ):
+        print("Initiation machine reboot, too long to connect")
+        machine.reset()
+    print("Timers: reboot=",delta,",on-net=", onNet)
     if miot.STA.isconnected():      # check if the station is connected to an AP
         #print ("connected")
         dogTickIsConnected()

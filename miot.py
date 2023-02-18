@@ -7,7 +7,6 @@ import ujson ## config info
 import uselect
 from time import sleep
 
-import dhcpgw
 
 ########################################
 mode = None
@@ -20,6 +19,9 @@ AP = None
 config = []
 init_time = 0
 
+## The OnNetTimer starts when we make a STA connection, which points
+## us towards the root AP.  It's set to none, when we 'leave' the
+## network.
 OnNetTimer = None
 
 #cs = None
@@ -54,23 +56,25 @@ class Watchdog:
     def reset(self):
         self.last =  utime.ticks_ms()
 
+import dhcpgw
+        
+        
 ########################################
 def ap_up():
-    global AP, OnNetTimer
+    global AP
     if not AP.isconnected():
         print("miot.mesh: AP up")
         AP.config(essid='iotnet', channel=5,password='bustergus25',authmode=network.AUTH_WPA_WPA2_PSK)
         AP.connect()
-        if not OnNetTimer:
-            OnNetTimer = Timer()
 
 def ap_down():
-    global AP, OnNetTimer    
+    global AP
     print("miot.mesh: AP down")
     AP.disconnect()
-    OnNetTimer = None
 
+    
 def OnNet():
+    "Returns the amount of time that we have been connected to a MESH parent, through the STA interface."
     global OnNetTimer    
     if OnNetTimer:
         return OnNetTimer.delta()
@@ -172,7 +176,7 @@ def comms_down():
 then bring them back up when a new home is found.
 
     """
-    global snd_socket, rcv_socket
+    global snd_socket, rcv_socket, OnNetTimer
     if snd_socket:
         snd_socket.close()
         snd_socket = None
@@ -180,11 +184,14 @@ then bring them back up when a new home is found.
         rcv_socket.close()
         rcv_socket = None
     dhcpgw.comms_down()
+    OnNetTimer = None
+    
     
 def comms_up():
-    global poll,server,snd_socket,rcv_socket,STA,AP
+    global poll,server,snd_socket,rcv_socket,STA,AP,OnNetTimer
     #print("comms_up:",STA)
     if STA and STA.isconnected() and not snd_socket:
+        print("miot:initiation socket creation")
         snd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         rcv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         snd_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)        
@@ -196,6 +203,8 @@ def comms_up():
         poll = uselect.poll()
         poll.register(rcv_socket, uselect.POLLIN  | uselect.POLLHUP | uselect.POLLERR)
         dhcpgw.comms_up()
+        if not OnNetTimer:
+            OnNetTimer = Timer()
         return True
     return False
 

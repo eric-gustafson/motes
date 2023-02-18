@@ -4,6 +4,7 @@
 # run a dhcp relay agent on esp32 motes.
 
 import sys, struct, utime, socket, network, uhashlib#, urequests
+import miot
 import uselect
 
 DHCP_SERVER_PORT = 67
@@ -21,7 +22,7 @@ STA = None
 ## The number of hops away from the aggregator.  This will be placed
 ## in the dhcp message.  The EM will use this information to make
 ## decisions on who to add the node through
-nhops = None
+nhops = 1
 
 ## The gateway is tied to the specific hardware/OS of the
 ## ESP32/FreeRTOS implementation that supports APSTA mode.
@@ -63,20 +64,20 @@ def comms_down():
     print("dhcpgw.comms_down")
     poll = None
     for sock in [sta_dhcp_client_socket, ap_dhcp_server_socket]:
-        sock.shutdown()
+        #sock.shutdown()
         sock.close()
     
 def get_giaddr(pbuff):
-    return pbuff[48:52]
+    return pbuff[24:29]
 
 #octets 48-51
-      
 def set_giaddr_using_straddr(packetbuff,ipaStr):
     "Set's the GIADDR part of the packet using the STA address"
+    print("setting giaddr:",ipaStr)
     try:
         j = 0
         for i in ipaStr.split('.'):
-            packetbuff[48+j]=int(i)
+            packetbuff[24+j]=int(i)
             j += 1
         return packetbuff
     except Execption as e:
@@ -88,43 +89,74 @@ def set_giaddr_using_sta_addr(packetbuff):
     #octets 48-51
     global STA
     ip,nm,gw,dnss = STA.ifconfig()
-    return set_giaddr_using_sta_addr(packetbuff,ip)
+    return set_giaddr_using_straddr(packetbuff,ip)
 
 
-def incHops(pbuff):
-    hi = int(pbuff[3]) #getHops(pbuff)
-    hi += 1
-    pbuff[3] = hi
+def setHops(pbuff):
+    pbuff[3] = nhops # biba[0]
 
-def getHops(pbuff):
-    [n] = struct.unpack("xxxb",pbuff[0:4])
-    return n
-    
+def getHops(buff):
+    try:
+        return int(buff[3])
+    except Exception as e:
+        print("dhcpgw.gethops.error:",e)
+    return -1
+
+def ap_receive_handler(buff):
+    # "Receives a dhcp pdu on the AP interface, and forwards it to the root
+    # server, after incrementing the hop count and setting the dhcp relay
+    # field, giaddr."
+    global sta_dhcp_client_socket
+    try:
+        if not miot.RootServer:
+            print("ap_receive_handler -- no root server set")
+            return 
+        print("ap_receive_handler")
+        babuff = bytearray(buff)
+        setHops(babuff)
+        set_giaddr_using_sta_addr(babuff)
+        print("giaddr:",get_giaddr(babuff))
+        sndbuff = bytes(babuff)
+        print("hop count:",getHops(sndbuff))
+        server = (miot.RootServer,DHCP_SERVER_PORT)
+        print("sending dhcpc pdu to:",server)
+        sta_dhcp_client_socket.sendto(sndbuff,server)
+    except Exception as e:
+        print("ap_receive_handler.error:",e)
+        
+def sta_receive_handler(buff):
+    ## TODO: intercept the dhcp offer and update the 
+    return None
+
 ## TODO: Send the dhcp inbound (from teh dhcpc) to the
 ## gateway.
 ##
 ## Should only be called when the AP is up.  We receive DHCP on the AP connection
 ## and unicast them to the root server.
+
+
+tic300s    = miot.Watchdog(300*1000)
+
+
 def tic(waitTime_ms):
     global poll,sta_dhcp_client_socket, ap_dhcp_server_socket
     try:
         if poll:
             events = poll.poll(waitTime_ms)
-            print ("dhcpgw.poll.events: ",events)
+            #print ("dhcpgw.poll.events: ",events)
             for socket, flag in events:
                 if flag & uselect.POLLIN:
                     buff,address = socket.recvfrom(512)
-                    babuff = bytearray(buff)
                     print("DHCPGW MESSAGE:",address,"\n")
-                    incHops(babuff)
-                    print("hop count:",getHops(babuff))
-                    set_giaddr_using_sta_addr(babuff)
-                    print("giaddr:",get_giaddr(babuff))
-                    buff = bytes(babuff)
                     if socket == ap_dhcp_server_socket:
-                        print("root server '%s'" % (miot.RootServer))
-                        sta_dhcp_client_socket.sendto(buff,(miot.RootServer,DHCP_SERVER_PORT))
+                        print("AP->STA")
+                        ap_receive_handler(buff)
                     else:
+                        print("STA->AP")
                         ap_dhcp_server_socket.sendto(buff,('255.255.255.255',DHCP_CLIENT_PORT))
+        if tic300s.msecs_left() <= 0:
+            tic300s.reset()
+            print("root server '%s'" % (miot.RootServer))
+            print(network.routes())
     except Exception as e:
         print("dhcpgw.tic.error:",e)

@@ -42,7 +42,6 @@ while True:
     miot.tic(20)
     netdog.tic()
     onNet = miot.OnNet()
-    print("on-net:", onNet)
     if onNet > 0:
         dhcpgw.tic(5000)
     else:
